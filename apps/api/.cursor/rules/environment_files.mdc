@@ -1,0 +1,23 @@
+---
+description: Sincroniza alterações do .env com o .env.example
+globs: apps/api/.env,apps/api/.env.example
+alwaysApply: true
+---
+
+# Arquivos de ambiente
+
+Toda alteração em `apps/api/.env` deve ser refletida no mesmo commit de trabalho em `apps/api/.env.example`.
+
+Inclui variável nova, renomeada, removida ou com tipo esperado diferente. Remova do exemplo o que saiu do `.env`.
+
+No `.env.example`, não copie segredos nem valores reais. Para cada variável, documente o nome, o tipo esperado e o que ela representa:
+
+```bash
+# POSTGRES_PORT: number — porta TCP em que o PostgreSQL local escuta
+POSTGRES_PORT=
+
+# POSTGRES_HOST: string — host usado pela API para conectar ao PostgreSQL
+POSTGRES_HOST=
+```
+
+Mantenha o valor vazio ou com um placeholder óbvio. Agrupe variáveis relacionadas com um comentário de seção, como no `.env`.
