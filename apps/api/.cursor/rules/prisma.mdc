@@ -1,0 +1,13 @@
+---
+description: Só o repository importa o client Prisma
+globs: apps/api/src/**/*.ts
+alwaysApply: true
+---
+
+# Prisma
+
+O client gerado fica em `apps/api/generated/prisma`. Quem importa esse client é um único provider injetável e os repositories. Controller, service, use case, schema Zod e DTO não importam Prisma.
+
+O use case chama métodos do repository. A query, o `select` e a transação ficam no repository. Erro conhecido do Prisma vira `ApplicationError` no `catch` do repository, como em `errors.mdc`.
+
+Nomes de model e de campo no `schema.prisma` ficam em inglês.

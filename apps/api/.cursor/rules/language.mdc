@@ -1,0 +1,23 @@
+---
+description: Inglês em todo código, nome e mensagem da API
+globs: apps/api/**/*.ts
+alwaysApply: true
+---
+
+# Language
+
+Vale só para `apps/api`. Escreva código e contrato da API em inglês: pastas, arquivos, tipos, classes, funções, variáveis, comentários, logs, mensagens de erro, mensagens do Zod e segmentos de rota.
+
+```ts
+// Errado
+const criarFatura = () => {
+  throw new Error('Fatura não encontrada');
+};
+
+// Certo
+const createInvoice = () => {
+  throw new Error('Invoice not found');
+};
+```
+
+Um pedido em português não muda o idioma do código. Texto de produto em outro idioma só entra quando o requisito pedir tradução explícita.

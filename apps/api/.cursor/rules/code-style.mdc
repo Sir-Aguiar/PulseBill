@@ -1,0 +1,18 @@
+---
+description: Formatação e nomes alinhados ao Prettier da API
+globs: apps/api/**/*.ts
+alwaysApply: true
+---
+
+# Code style
+
+Siga `apps/api/.prettierrc`: aspas simples, vírgula final e o padrão do Prettier para ponto e vírgula e indentação de 2 espaços. Mantenha a extensão `.js` nos imports relativos, como em `src/main.ts`.
+
+- `PascalCase` para classes e tipos, `camelCase` para funções e variáveis, `kebab-case` para arquivos.
+- Sufixe as classes Nest com `Controller`, `Service`, `UseCase`, `Repository` e `Module`.
+- Um use case por arquivo. Um schema exportado por arquivo quando as ações diferem.
+- Prefira `unknown` com parse do Zod a `any`.
+- Aguarde toda promise. Não deixe promise solta (`typescript/no-floating-promises`).
+- Decisão de negócio fica no use case, não no controller nem no repository.
+
+Depois de editar TypeScript em `apps/api`, deixe o arquivo no formato que o Prettier já aceitaria.

@@ -1,0 +1,24 @@
+---
+description: Fluxo DTO, schema, controller, service, use case e repository
+globs: apps/api/src/**/*.ts
+alwaysApply: true
+---
+
+# Layered architecture
+
+Cada funcionalidade fica em `src/<feature>/`. Uma requisição segue uma direção:
+
+DTO → Schema → Controller → Service → Use Case → Repository
+
+| Camada | Arquivo | Responsabilidade |
+| --- | --- | --- |
+| DTO | `dto/<name>.dto.ts` | Só o tipo inferido do schema |
+| Schema | `schemas/<name>.schema.ts` | Validação Zod e origem do tipo do DTO |
+| Controller | `<feature>.controller.ts` | HTTP: status, params, parse e chamada ao service |
+| Service | `<feature>.service.ts` | Liga o caso de uso. Sem regra de negócio e sem persistência |
+| Use case | `use-cases/<action>.use-case.ts` | Um método `execute` com a regra de negócio |
+| Repository | `repositories/<feature>.repository.ts` | Persistência |
+
+Importe só para a camada seguinte. O controller não chama use case nem repository. O service não chama repository. O use case não lê `Request` nem monta resposta HTTP. O repository não importa Zod, controller nem service.
+
+Registre controller, service, use case e repository em `<feature>.module.ts`.

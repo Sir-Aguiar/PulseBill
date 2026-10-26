@@ -1,0 +1,25 @@
+---
+description: Um filtro global transforma erros da aplicação em resposta HTTP
+globs: apps/api/src/**/*.ts
+alwaysApply: true
+---
+
+# Exception filter
+
+Um único filtro global em `src/common/filters/application-error.filter.ts` escreve a resposta HTTP. Registre-o em `main.ts`. Controller, service, use case e repository não chamam `response.status` nem capturam esses erros para formatar a saída.
+
+O filtro trata dois tipos:
+
+- `ApplicationError`: usa o `status` e a `message` já definidos.
+- `EntityError`: responde 422 com a `message` do erro.
+
+O body leva `statusCode` e `message`. `cause`, `meta` e a mensagem crua do Prisma ficam no log.
+
+```ts
+{
+  statusCode: 422,
+  message: 'Payment is already settled'
+}
+```
+
+Qualquer outro erro segue o tratamento padrão do Nest.

@@ -1,0 +1,30 @@
+---
+description: Erros esperados do Prisma viram ApplicationError no repository
+globs: apps/api/src/**/*.ts
+alwaysApply: true
+---
+
+# Errors
+
+Erros esperados de banco são capturados no repository e relançados como `ApplicationError` (`src/common/errors/application.error.ts`). Controller, service e use case não capturam erro do Prisma; deixam o `ApplicationError` subir.
+
+Em cada chamada ao Prisma, capture `Prisma.PrismaClientKnownRequestError`. Relance o restante. O status vem de `ApplicationError.prismaErrorToHttpStatus`. A mensagem é decidida no `catch`, pelo código: uma frase única para o `try` inteiro não distingue `P2000` de `P2002`.
+
+```ts
+catch (error) {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    throw new ApplicationError(
+      ApplicationError.prismaErrorToHttpStatus(error.code),
+      this.prismaErrorMessage(error),
+      error,
+    );
+  }
+  throw error;
+}
+```
+
+`prismaErrorMessage` fica no repository, ao lado do `catch`. Mensagens em inglês: `P2000` valor longo demais; `P2002` valor já existe; `P2003` registro relacionado inexistente; `P2001` e `P2025` registro não encontrado; `P2005` e `P2006` tipo inválido; `P2004` restrição violada; outro código, erro inesperado de banco.
+
+Se `error.meta` identificar o campo, cite esse campo. Um `P2002` em `email` vira `Email already exists`, não `Could not create payment`.
+
+`prismaErrorToHttpStatus` fica em `ApplicationError`: `P2000` e `P2003` para 400; `P2001` e `P2025` para 404; `P2002` e `P2004` para 409; `P2005` e `P2006` para 422; qualquer outro código para 500. `code`, `meta` e `message` do Prisma ficam na `cause` e no log, fora do body HTTP.

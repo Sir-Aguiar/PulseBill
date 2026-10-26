@@ -1,0 +1,19 @@
+---
+description: Use case lança EntityError para regra de negócio
+globs: apps/api/src/**/*.ts
+alwaysApply: true
+---
+
+# Entity errors
+
+Uma regra de negócio quebrada sai do use case como `EntityError` (`src/common/errors/entity.error.ts`). A mensagem é estável e em inglês. O use case não escolhe status HTTP e não captura erro do Prisma.
+
+```ts
+if (payment.status === 'settled') {
+  throw new EntityError('Payment is already settled');
+}
+```
+
+`EntityError` cobre invariante de domínio: estado inválido, limite excedido, operação fora de ordem. Registro ausente ou conflito que o Prisma já sinalizou continua como `ApplicationError` lançado no repository.
+
+O service repassa a exceção. O controller não a captura.

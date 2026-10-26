@@ -1,0 +1,31 @@
+---
+description: Zod como fonte dos schemas e dos tipos de DTO
+globs: apps/api/src/**/*.ts
+alwaysApply: true
+---
+
+# Zod schemas and DTOs
+
+Valide e tipe a entrada com Zod. Não use `class-validator`, `class-transformer` nem uma interface escrita à mão que repita o schema.
+
+`schemas/<name>.schema.ts` exporta o schema. `dto/<name>.dto.ts` exporta só o tipo inferido.
+
+```ts
+import { z } from 'zod';
+
+export const createInvoiceSchema = z.object({
+  customerId: z.string().uuid(),
+  amountInCents: z.number().int().positive(),
+});
+
+export type CreateInvoiceDto = z.infer<typeof createInvoiceSchema>;
+```
+
+Faça o parse na borda do controller, antes de chamar o service:
+
+```ts
+const dto = createInvoiceSchema.parse(body);
+return this.invoicesService.create(dto);
+```
+
+Falha de parse é erro do cliente. Não repasse `unknown` nem o body cru para o service. Nomes de schema, campos e mensagens ficam em inglês.
