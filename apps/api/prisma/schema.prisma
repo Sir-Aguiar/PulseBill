@@ -1,7 +1,7 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// PulseBill billing model.
+// Money totals use Decimal(12, 4). Unit prices and FX rates use Decimal(18, 8)
+// so per-token prices survive. Quantities use Decimal(18, 4) so storage_gb
+// is not truncated to an integer.
 
 generator client {
   provider = "prisma-client"
@@ -10,4 +10,255 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+enum Currency {
+  USD
+  BRL
+  EUR
+}
+
+enum Metric {
+  API_CALLS
+  TOKENS
+  STORAGE_GB
+}
+
+enum InvoiceStatus {
+  METERING
+  CLOSING
+  INVOICED
+  PAID
+  PAST_DUE
+  VOID
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum WebhookProcessingStatus {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  FAILED
+}
+
+model Customer {
+  id             String   @id @default(uuid()) @db.Uuid
+  name           String
+  legalName      String
+  email          String   @unique
+  taxId          String?
+  billingAddress String?
+  currency       Currency
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  subscriptions Subscription[]
+  usageLogs     UsageLog[]
+  rollups       UsageDailyRollup[]
+  invoices      Invoice[]
+}
+
+model SubscriptionPlan {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String
+  basePriceUsd Decimal  @db.Decimal(12, 4)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  metricPrices  MetricPrice[]
+  subscriptions Subscription[]
+}
+
+/// Price of one metric on a plan. effectiveTo null means the row is current.
+/// A later close snapshots the matching row onto InvoiceLine instead of reading the live price.
+model MetricPrice {
+  id               String    @id @default(uuid()) @db.Uuid
+  planId           String    @db.Uuid
+  metric           Metric
+  unitPriceUsd     Decimal   @db.Decimal(18, 8)
+  includedQuantity Decimal   @default(0) @db.Decimal(18, 4)
+  effectiveFrom    DateTime
+  effectiveTo      DateTime?
+  createdAt        DateTime  @default(now())
+
+  plan SubscriptionPlan @relation(fields: [planId], references: [id])
+
+  @@index([planId, metric, effectiveFrom])
+}
+
+/// Which plan applied to a customer over a time range. endsAt null means the subscription is current.
+model Subscription {
+  id         String    @id @default(uuid()) @db.Uuid
+  customerId String    @db.Uuid
+  planId     String    @db.Uuid
+  startsAt   DateTime
+  endsAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  customer Customer         @relation(fields: [customerId], references: [id])
+  plan     SubscriptionPlan @relation(fields: [planId], references: [id])
+  invoices Invoice[]
+
+  @@index([customerId, startsAt])
+  @@index([planId])
+}
+
+model UsageLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  customerId     String   @db.Uuid
+  /// Set when a close absorbs the event. Null means the event is still unbilled.
+  invoiceId      String?  @db.Uuid
+  metric         Metric
+  quantity       Decimal  @db.Decimal(18, 4)
+  idempotencyKey String
+  /// When the producer says the usage happened.
+  recordedAt     DateTime
+  /// When this API accepted the event.
+  receivedAt     DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id])
+  invoice  Invoice? @relation(fields: [invoiceId], references: [id])
+
+  @@unique([customerId, idempotencyKey])
+  @@index([customerId, recordedAt])
+  @@index([invoiceId])
+}
+
+/// Daily quantity per customer and metric, maintained at ingestion so the dashboard does not scan raw events.
+model UsageDailyRollup {
+  id         String   @id @default(uuid()) @db.Uuid
+  customerId String   @db.Uuid
+  metric     Metric
+  day        DateTime @db.Date
+  quantity   Decimal  @db.Decimal(18, 4)
+  updatedAt  DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@unique([customerId, metric, day])
+  @@index([customerId, day])
+}
+
+model Invoice {
+  id                   String        @id @default(uuid()) @db.Uuid
+  /// Human-readable number assigned when the invoice is issued. Null while metering.
+  number               String?       @unique
+  customerId           String        @db.Uuid
+  subscriptionId       String        @db.Uuid
+  status               InvoiceStatus
+  periodStart          DateTime
+  periodEnd            DateTime
+  /// Billing currency copied from the customer when the period opens.
+  currency             Currency
+  planName             String?
+  baseFeeUsd           Decimal?      @db.Decimal(12, 4)
+  usageSubtotalUsd     Decimal?      @db.Decimal(12, 4)
+  subtotalUsd          Decimal?      @db.Decimal(12, 4)
+  taxJurisdiction      String?
+  taxRate              Decimal?      @db.Decimal(8, 6)
+  taxAmountUsd         Decimal?      @db.Decimal(12, 4)
+  taxAmountLocal       Decimal?      @db.Decimal(12, 4)
+  exchangeRate         Decimal?      @db.Decimal(18, 8)
+  exchangeRateQuotedAt DateTime?
+  exchangeRateSource   String?
+  exchangeRateFallback Boolean       @default(false)
+  totalLocal           Decimal?      @db.Decimal(12, 4)
+  pdfStorageUrl        String?
+  pdfHash              String?
+  issuedAt             DateTime?
+  dueAt                DateTime?
+  paidAt               DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  customer      Customer               @relation(fields: [customerId], references: [id])
+  subscription  Subscription           @relation(fields: [subscriptionId], references: [id])
+  lines         InvoiceLine[]
+  statusHistory InvoiceStatusHistory[]
+  payments      Payment[]
+  webhookLogs   PaymentWebhookLog[]
+  usageLogs     UsageLog[]
+
+  @@unique([customerId, periodStart])
+  @@index([status, dueAt])
+  @@index([subscriptionId])
+}
+
+model InvoiceLine {
+  id               String  @id @default(uuid()) @db.Uuid
+  invoiceId        String  @db.Uuid
+  metric           Metric
+  description      String
+  quantity         Decimal @db.Decimal(18, 4)
+  includedQuantity Decimal @db.Decimal(18, 4)
+  billableQuantity Decimal @db.Decimal(18, 4)
+  unitPriceUsd     Decimal @db.Decimal(18, 8)
+  amountUsd        Decimal @db.Decimal(12, 4)
+  sortOrder        Int     @default(0)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId])
+}
+
+model InvoiceStatusHistory {
+  id         String         @id @default(uuid()) @db.Uuid
+  invoiceId  String         @db.Uuid
+  fromStatus InvoiceStatus?
+  toStatus   InvoiceStatus
+  reason     String?
+  /// User id or "system". There is no user table yet.
+  actor      String?
+  createdAt  DateTime       @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId, createdAt])
+}
+
+model Payment {
+  id                String        @id @default(uuid()) @db.Uuid
+  invoiceId         String        @db.Uuid
+  provider          String
+  externalPaymentId String
+  status            PaymentStatus
+  amount            Decimal       @db.Decimal(12, 4)
+  currency          Currency
+  failureReason     String?
+  paidAt            DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  invoice     Invoice             @relation(fields: [invoiceId], references: [id])
+  webhookLogs PaymentWebhookLog[]
+
+  @@unique([provider, externalPaymentId])
+  @@index([invoiceId])
+}
+
+model PaymentWebhookLog {
+  id              String                  @id @default(uuid()) @db.Uuid
+  provider        String
+  externalEventId String
+  invoiceId       String?                 @db.Uuid
+  paymentId       String?                 @db.Uuid
+  status          WebhookProcessingStatus @default(RECEIVED)
+  rawPayload      Json
+  signatureHash   String
+  errorMessage    String?
+  receivedAt      DateTime                @default(now())
+  processedAt     DateTime?
+
+  invoice Invoice? @relation(fields: [invoiceId], references: [id])
+  payment Payment? @relation(fields: [paymentId], references: [id])
+
+  @@unique([provider, externalEventId])
+  @@index([invoiceId])
+  @@index([paymentId])
 }
