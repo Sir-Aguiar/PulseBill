@@ -57,6 +57,14 @@ $ npm run test:e2e
 $ npm run test:cov
 ```
 
+## Usage rate-limit load
+
+Burst `POST /v1/usage` at a local API. Defaults: `http://127.0.0.1:8080`, 20 requests, concurrency 10. A host other than `localhost`, `127.0.0.1`, or `::1` is refused unless `--allow-remote` is passed. The command prints one count per HTTP status. With a low `USAGE_RATE_LIMIT_MAX`, at least one line should be `429`.
+
+```bash
+$ npm run load:usage -- --count 20 --concurrency 10
+```
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
