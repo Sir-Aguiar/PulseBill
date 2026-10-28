@@ -4,7 +4,7 @@ import { ApplicationErrorFilter } from './common/filters/application-error.filte
 import { EnvService } from './config/env.service.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   app.useGlobalFilters(new ApplicationErrorFilter());
   const env = app.get(EnvService);
   await app.listen(env.get('API_PORT'));
