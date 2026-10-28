@@ -8,6 +8,8 @@ export const envSchema = z.object({
   POSTGRES_HOST: z.string().min(1, 'POSTGRES_HOST is required'),
   POSTGRES_SCHEMA: z.string().min(1, 'POSTGRES_SCHEMA is required'),
   API_PORT: z.coerce.number().int().positive(),
+  USAGE_RATE_LIMIT_MAX: z.coerce.number().int().positive(),
+  USAGE_RATE_LIMIT_TTL_MS: z.coerce.number().int().positive(),
   DATABASE_URL: z.url('DATABASE_URL must be a URL'),
 });
 
