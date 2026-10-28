@@ -5,10 +5,13 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  UseGuards,
 } from '@nestjs/common';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { ZodError } from 'zod';
 import { Public } from '../common/decorators/public.decorator.js';
 import { recordUsageSchema } from './schemas/record-usage.schema.js';
+import { getUsageRateLimit, USAGE_THROTTLER_NAME } from './usage-rate-limit.js';
 import { UsageService } from './usage.service.js';
 
 @Controller('v1/usage')
@@ -17,6 +20,13 @@ export class UsageController {
 
   @Public()
   @Post()
+  @UseGuards(ThrottlerGuard)
+  @Throttle({
+    [USAGE_THROTTLER_NAME]: {
+      limit: () => getUsageRateLimit().limit,
+      ttl: () => getUsageRateLimit().ttl,
+    },
+  })
   @HttpCode(HttpStatus.CREATED)
   record(@Body() body: unknown) {
     const dto = this.parseBody(body);
