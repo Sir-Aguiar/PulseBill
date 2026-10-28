@@ -9,6 +9,9 @@ export const envSchema = z.object({
   POSTGRES_SCHEMA: z.string().min(1, 'POSTGRES_SCHEMA is required'),
   API_PORT: z.coerce.number().int().positive(),
   DATABASE_URL: z.url('DATABASE_URL must be a URL'),
+  WEBHOOK_SIGNING_SECRET: z
+    .string()
+    .min(1, 'WEBHOOK_SIGNING_SECRET is required'),
 });
 
 export type Env = z.infer<typeof envSchema>;
