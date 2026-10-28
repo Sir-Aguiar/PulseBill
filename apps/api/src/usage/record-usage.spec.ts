@@ -1,17 +1,30 @@
-import { INestApplication } from '@nestjs/common';
-import { APP_GUARD, Reflector } from '@nestjs/core';
+import { Controller, Get, INestApplication } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Prisma } from '../../generated/prisma/client.js';
+import { Public } from '../common/decorators/public.decorator.js';
 import { ApplicationErrorFilter } from '../common/filters/application-error.filter.js';
 import { AuthenticationGuard } from '../common/guards/authentication.guard.js';
-import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { UsageRepository } from './repositories/usage.repository.js';
-import { RecordUsageUseCase } from './use-cases/record-usage.use-case.js';
-import { UsageController } from './usage.controller.js';
-import { UsageService } from './usage.service.js';
+import { UsageModule } from './usage.module.js';
+
+const usageRateLimitMax = 3;
+const usageRateLimitTtlMs = 60000;
+
+process.env.USAGE_RATE_LIMIT_MAX = String(usageRateLimitMax);
+process.env.USAGE_RATE_LIMIT_TTL_MS = String(usageRateLimitTtlMs);
+
+@Public()
+@Controller('probe')
+class UnthrottledController {
+  @Get()
+  index(): string {
+    return 'ok';
+  }
+}
 
 const customerId = '11111111-1111-4111-8111-111111111111';
 const missingCustomerId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -92,25 +105,21 @@ describe('POST /v1/usage', () => {
     rollup.upsert.mockClear();
 
     const moduleRef = await Test.createTestingModule({
-      controllers: [UsageController],
+      imports: [UsageModule],
+      controllers: [UnthrottledController],
       providers: [
-        UsageService,
-        RecordUsageUseCase,
-        UsageRepository,
-        Reflector,
-        {
-          provide: PrismaService,
-          useValue: {
-            usageLog,
-            usageDailyRollup: rollup,
-          },
-        },
         {
           provide: APP_GUARD,
           useClass: AuthenticationGuard,
         },
       ],
-    }).compile();
+    })
+      .overrideProvider(PrismaService)
+      .useValue({
+        usageLog,
+        usageDailyRollup: rollup,
+      })
+      .compile();
 
     app = moduleRef.createNestApplication();
     app.useGlobalFilters(new ApplicationErrorFilter());
@@ -193,5 +202,44 @@ describe('POST /v1/usage', () => {
     });
     expect(inserted.size).toBe(0);
     expect(rollup.upsert).not.toHaveBeenCalled();
+  });
+
+  it('records a short burst and rejects the request past the limit', async () => {
+    for (let index = 0; index < usageRateLimitMax; index += 1) {
+      const response = await request(app.getHttpServer())
+        .post('/v1/usage')
+        .send({
+          ...validBody,
+          idempotencyKey: `burst-${index}`,
+        });
+
+      expect(response.status).toBe(201);
+    }
+
+    const blocked = await request(app.getHttpServer())
+      .post('/v1/usage')
+      .send({
+        ...validBody,
+        idempotencyKey: 'burst-over',
+      });
+
+    expect(blocked.status).toBe(429);
+    expect(blocked.body).toEqual({
+      statusCode: 429,
+      message: 'ThrottlerException: Too Many Requests',
+    });
+    expect(usageLog.create).toHaveBeenCalledTimes(usageRateLimitMax);
+    expect(inserted.size).toBe(usageRateLimitMax);
+  });
+
+  it('does not rate limit routes outside POST /v1/usage', async () => {
+    for (let index = 0; index < usageRateLimitMax + 2; index += 1) {
+      const response = await request(app.getHttpServer()).get('/probe');
+
+      expect(response.status).toBe(200);
+      expect(response.text).toBe('ok');
+    }
+
+    expect(usageLog.create).not.toHaveBeenCalled();
   });
 });
