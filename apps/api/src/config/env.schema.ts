@@ -9,6 +9,9 @@ export const envSchema = z.object({
   POSTGRES_SCHEMA: z.string().min(1, 'POSTGRES_SCHEMA is required'),
   API_PORT: z.coerce.number().int().positive(),
   DATABASE_URL: z.url('DATABASE_URL must be a URL'),
+  EXCHANGE_RATE_URL: z.url('EXCHANGE_RATE_URL must be a URL'),
+  EXCHANGE_RATE_TIMEOUT_MS: z.coerce.number().int().positive(),
+  EXCHANGE_RATE_MAX_ATTEMPTS: z.coerce.number().int().positive(),
 });
 
 export type Env = z.infer<typeof envSchema>;
